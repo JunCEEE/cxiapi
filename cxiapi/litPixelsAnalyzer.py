@@ -6,9 +6,10 @@ import multiprocessing as mp
 import h5py
 import ctypes
 import time
+from tqdm import tqdm
 from timeit import default_timer as timer
 import matplotlib.pyplot as plt
-from cxiData import cxiData, calibrateModule
+from cxiapi import cxiData, calibrateModule
 from psutil import virtual_memory
 
 
@@ -90,12 +91,8 @@ class litPixelsAnalyzer():
                            args=(c, module, litpix))
             jobs.append(p)
             p.start()
-        stime = timer()
-        for i, j in enumerate(jobs):
+        for j in tqdm(jobs):
             j.join()
-            etime = timer()
-            print('{}/{} processes done in {:.2f} s'.format(
-                i + 1, len(jobs), etime - stime))
         self.litpix = np.frombuffer(litpix.get_obj(), dtype='u8')
         self.cxi_good_frames = self.cxi_data.good_frames
         nframe = len(self.litpix)
@@ -284,7 +281,7 @@ class litPixelsAnalyzer():
     def _getOutFname(self, out_fname):
         if out_fname is None:
             out_fname = os.path.basename(
-                self.cxi_data.fname).split('_')[0] + '_hits.h5'
+                self.cxi_data.fname).split('.')[0] + '_hits.h5'
         return out_fname
 
     def _LitPixelsWorker(self, p, m, litpix):
