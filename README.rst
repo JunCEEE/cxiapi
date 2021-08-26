@@ -23,10 +23,21 @@ An API and analysis toolkit for CXI dataset, including hitfinding, calibration a
 * Documentation: https://cxiapi.readthedocs.io.
 
 
-Features
---------
+Installation for EuXFEL
+------------------------
+1. Load exfel module.
 
-* TODO
+.. code-block:: bash
+
+    $ module load exfel exfel_anaconda3
+
+2. Git clone this repository and install cxiapi.
+
+.. code-block:: bash
+
+    $ git clone https://github.com/JunCEEE/cxiapi.git
+    $ cd cxiapi
+    $ pip install --user ./
 
 Credits
 -------
