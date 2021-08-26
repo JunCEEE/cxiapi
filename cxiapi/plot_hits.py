@@ -75,7 +75,7 @@ if __name__ == '__main__':
             hits = f['hits/assembled']
             frameID = f['hits/frameID']
             if module is None:
-                module = f['hits/litpixelModule']
+                module = f['hits/litpixelModule'][()]
             lp = f[f'litpixels_{module}']
             nhits = hits.shape[0]
             if args.verbose:
