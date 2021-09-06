@@ -280,8 +280,9 @@ class litPixelsAnalyzer():
 
     def _getOutFname(self, out_fname):
         if out_fname is None:
-            out_fname = os.path.basename(
-                self.cxi_data.fname).split('.')[0] + '_hits.h5'
+            os_base = os.path.basename(self.cxi_data.fname)
+            base_name = re.findall(r'^(\S+)\.\S+$', os_base)[0]
+            out_fname = base_name.split('_')[0] + '_hits.h5'
         return out_fname
 
     def _LitPixelsWorker(self, p, m, litpix):
