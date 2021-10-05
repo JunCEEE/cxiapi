@@ -246,6 +246,21 @@ class cxiData():
         res, centre = geom.position_modules_fast(calib_detector)
         return res
 
+    def getNphotons(self, snap_idx, module_idx):
+        # Return one module
+        n = snap_idx
+        calib_data = calibrateFixedGainModule(self.data[n, module_idx, 0, :, :],
+                                                  self.data[n, module_idx, 1, :, :],
+                                                  0, module_idx,
+                                                  self.cellIDs[n, module_idx],
+                                                  self.calib)
+        # calib_data = self.getCalibrateModule(snap_idx, module_idx)
+        calib_data /= self.adu_per_photon
+        calib_data[calib_data < 0.5] = 0
+        module_mask = self.module_masks[str(module_idx)]
+        calib_data *= module_mask
+        return calib_data
+
     def getPostProcessedData(self,
                              snap_idx: int,
                              module_idx: int = None,
