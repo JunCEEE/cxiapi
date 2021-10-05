@@ -17,6 +17,8 @@ class cxiData():
     """CXI data class"""
     def __init__(self, fname, verbose: int = 0, debug=0):
         super(cxiData, self).__init__()
+        # gain_mode = None means adaptive gain mode.
+        self.gain_mode = None
         self.fname = fname
         self.dset_name = '/entry_1/instrument_1/detector_1/data'
         self.train_name = '/entry_1/trainId'
@@ -65,19 +67,18 @@ class cxiData():
 
     def getCalibratedFrames(
         self,
-        num,
+        frame_idx,
         assemble=True,
-        good_frames=None,
         nproc=0,
     ) -> ndarray:
         # All frames are dealt with filtered cells.
 
         try:
-            len(num)
-            num = np.array(num)
+            len(frame_idx)
+            frame_idx = np.array(frame_idx)
         except TypeError:
-            num = np.array([num])
-        assert len(num.shape) == 1, "Must contain a 1D array of integers"
+            frame_idx = np.array([frame_idx])
+        assert len(frame_idx.shape) == 1, "Must contain a 1D array of integers"
         if assemble:
             try:
                 self.x, self.y = geom.pixel_maps_from_geometry_file(
@@ -86,14 +87,19 @@ class cxiData():
                 raise AttributeError(
                     'Run cxiData.setGeom() to set geom_fname first.')
 
-        for n in num:
+        for n in frame_idx:
             if n > self.nframes or n < 0:
                 print('Out of range: %d, skipping event..' % n)
-                num = np.delete(num, np.where(num == n))
+                frame_idx = np.delete(frame_idx, np.where(frame_idx == n))
 
-        if good_frames is None:
-            good_frames = self.good_frames
-        selection = good_frames[num]
+        selection = frame_idx
+
+        try:
+            self.calib
+        except AttributeError:
+            raise AttributeError(
+                'Run cxiData.setCalib() to set Cheetah calibration files folder first.'
+            )
 
         ntasks = selection.shape[0]
         print('Calibrate %d frames' % ntasks)
@@ -223,6 +229,33 @@ class cxiData():
                 print(f'p1, calib_frame[{accu_jobs[1]}]',
                       calib_frame[accu_jobs[1], 15, 0, 1])
 
+    def getCalibrateModule(self, snap_idx, module_index):
+        n = snap_idx
+        data = self.data
+        cell_ids = self.cellIDs
+
+        if self.gain_mode is not None:
+            calib_data = calibrateFixedGainModule(
+                data[n, module_index, 0, :, :], data[n, module_index,
+                                                     1, :, :], self.gain_mode,
+                module_index, cell_ids[n, module_index], self.calib_files)
+
+        else:
+            calib_data = calibrateModule(data[n, module_index, 0, :, :],
+                                         data[n, module_index,
+                                              1, :, :], module_index,
+                                         cell_ids[n, module_index], self.calib)
+        return calib_data
+
+    def setGainMode(self, mode: int):
+        """Set gain mode.
+
+        Args:
+            mode (int): Fixed gain mode. 0: low, 1: medium, 2: high.
+            `None` means adaptive gain.
+        """
+        self.gain_mode = mode
+
     @property
     def nframes(self):
         """The total frame number."""
@@ -295,6 +328,7 @@ class cxiData():
         calib_glob = '%s/Cheetah*.h5' % calib_path
         self.calib_glob = calib_glob
         self.calib = [h5py.File(f, 'r') for f in sorted(glob.glob(calib_glob))]
+        self.calib_files = sorted(glob.glob(calib_glob))
         if self.verbose > 0:
             print('%d calibration files found' % len(self.calib))
 
@@ -352,6 +386,46 @@ def calibrateModule(data: ndarray,
                                                                       == i]
         badpix[gain_mode == i] = calib[module]['Badpixel'][i, cell][gain_mode
                                                                     == i]
+
+    data = (np.float32(data) - offset) * gain
+    data[badpix != 0] = 0
+
+    if cmode:
+        # Median subtraction by 64x64 asics
+        data = data.reshape(8, 64, 2, 64).transpose(1, 3, 0,
+                                                    2).reshape(64, 64, 16)
+        data -= np.median(data, axis=(0, 1))
+        data = data.reshape(64, 64, 8, 2).transpose(2, 0, 3,
+                                                    1).reshape(512, 128)
+
+    return data
+
+
+def calibrateFixedGainModule(data: ndarray,
+                             gain: ndarray,
+                             mode: int,
+                             module: int,
+                             cell: int,
+                             calib_files: list,
+                             cmode=True) -> ndarray:
+    """Calibrate one fixed gain module with Cheetah calibration files.
+
+    Args:
+        data (ndarray): Image data in shape (512, 128).
+        gain (ndarray): Gain data in shape (512, 128).
+        mode (int): Fixed gain mode. 0: low, 1: medium, 2: high.
+        module (int): Module index (0-15).
+        cell (int): Cell index.
+        calib (list): A list of calibration hdf5_objects/dicts.
+        cmode (bool, optional): Common mode correction. Defaults to True.
+
+    Returns:
+        ndarray: The calibrated image of the module.
+    """
+    with h5py.File(calib_files[module], 'r') as h5:
+        offset = h5['AnalogOffset'][mode, cell]
+        gain = h5['RelativeGain'][mode, cell]
+        badpix = h5['Badpixel'][mode, cell]
 
     data = (np.float32(data) - offset) * gain
     data[badpix != 0] = 0

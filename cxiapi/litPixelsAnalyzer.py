@@ -2,6 +2,7 @@ import sys
 import re
 import os
 import numpy as np
+from numpy import ndarray
 import multiprocessing as mp
 import h5py
 import ctypes
@@ -20,6 +21,7 @@ class litPixelsAnalyzer():
         self.cxi_data = cxi_data
         self.verbose = verbose
         self.litpix_params = {}
+        self.module_masks = {}
         try:
             self.setRunNumber()
         except:
@@ -37,6 +39,45 @@ class litPixelsAnalyzer():
             self.run = int(re.findall(r'\d+', rname)[0])
         else:
             self.run = run
+
+    def setROI(self, ROI):
+        self.ROI = ROI
+        assert len(ROI) == 2
+
+    def setAdu_per_photon(self, value=45):
+        self.adu_per_photon = 45
+
+    def setModuleMasks(self, module_idx, mask):
+        self.module_masks[str(module_idx)] = mask
+
+
+    def plotModule(self, snap_idx, module_index, is_transpose=False):
+        calib_data = getCalibData(self.cxi_data, snap_idx, module_index)
+        nphotons = calib_data / self.adu_per_photon
+        nphotons[nphotons < 0.5] = 0
+        if is_transpose:
+            nphotons = nphotons.transpose()
+        plt.figure()
+        plt.imshow(nphotons, vmax=2, origin='lower')
+
+    def plotROI(self, snap_idx, module_index, is_transpose=False):
+        calib_data = getCalibData(self.cxi_data,snap_idx, module_index)*self.module_masks[str(module_index)]
+        roi_data = calib_data[self.ROI]
+        data_indices = np.indices(calib_data.shape)
+        row_max = np.max(data_indices[0][self.ROI])
+        row_min = np.min(data_indices[0][self.ROI])
+        col_max = np.max(data_indices[1][self.ROI])
+        col_min = np.min(data_indices[1][self.ROI])
+        extent = [col_min, col_max, row_min, row_max]
+        nphotons = roi_data / self.adu_per_photon
+        nphotons[nphotons < 0.5] = 0
+        if is_transpose:
+            nphotons = nphotons.transpose()
+            extent = [row_min, row_max, col_min, col_max]
+        plt.figure()
+        plt.imshow(nphotons, vmax=2, origin='lower', extent=extent)
+
+
 
     def getLitPixels(self,
                      module: int,
@@ -347,3 +388,32 @@ class litPixelsAnalyzer():
         if 'ID/pulseId' in fptr:
             del fptr['ID/pulseId']
         fptr['ID/pulseId'] = self.cxi_data.pulseIDs[good_frames]
+
+def check_snapshot(snap_idx, module_index, threshold, module_mask, ROI, adu_per_photon):
+    calib_data = getCalibData(cxi, snap_idx, module_index)*module_mask
+    roi_data = calib_data[ROI]
+    nphotons = roi_data / adu_per_photon
+    nphotons[nphotons < 0.5] = 0
+    if threshold < np.log(nphotons.sum()):
+        return snap_idx
+
+def getCalibData(cxi_data, snap_idx, module_index):
+    n = snap_idx
+    data = cxi_data.data
+    cell_ids = cxi_data.cellIDs
+
+    calib_data = calibrateModule(data[n, module_index, 0, :, :],
+                                    data[n, module_index,
+                                        1, :, :], module_index,
+                                    cell_ids[n, 0], cxi_data.calib)
+    return calib_data
+
+def getHits(idx_range: list, module_index,
+            intens_thresh: float, module_mask, ROI, adu_per_photon) -> list:
+    # Get the index of the hits
+    with mp.Pool(mp.cpu_count()) as pool:
+        results = pool.starmap_async(
+            check_snapshot, [(snap_idx, module_index, intens_thresh, module_mask, ROI, adu_per_photon)
+                                    for snap_idx in idx_range]).get()
+    hits_indices = list(filter((None).__ne__, results))
+    return  hits_indices
