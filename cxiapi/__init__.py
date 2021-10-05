@@ -5,4 +5,3 @@ __email__ = 'juncheng.e@xfel.eu'
 __version__ = '0.1.0'
 
 from .cxiapi import *
-from .litPixelsAnalyzer import litPixelsAnalyzer
