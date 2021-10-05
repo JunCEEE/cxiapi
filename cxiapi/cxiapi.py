@@ -22,7 +22,7 @@ class cxiData():
         self.pulse_name = '/entry_1/pulseId'
         self.cell_name = '/entry_1/cellId'
         self.verbose = verbose
-        self.checkVDS()
+        self._load_vds()
         dset_shape = self.data.shape
         self.module_eg = np.empty(
             (dset_shape[1], dset_shape[3], dset_shape[4]))
@@ -31,19 +31,38 @@ class cxiData():
         self.ROI = [slice(None), slice(None)]
         self.module_masks = {}
 
-    def checkVDS(self):
-        """Check vds basic info"""
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._close_vds()
+        self._close_calib()
+
+    def _load_vds(self):
         fname = self.fname
         try:
-            vds = h5py.File(fname, 'r')
+            self.vds = h5py.File(fname, 'r')
         except IOError:
             print('ERROR: file does not exist: %s' % fname)
             sys.exit(-1)
-        self.num_h5cells = np.max(vds[self.cell_name][:, 0]) + 1
+        self.num_h5cells = np.max(self.cellIDs[:, 0]) + 1
         if self.verbose > 0:
             print('VDS file contains %d shots' % self.nframes)
             print('Module 0 contains %d cells' % self.num_h5cells)
-        vds.close()
+
+    def _close_calib(self):
+        try:
+            self.calib.close()
+        except ValueError:
+            print('WARNING: VDS file has already been closed')
+        except AttributeError:
+            pass
+
+    def _close_vds(self):
+        try:
+            self.vds.close()
+        except ValueError:
+            print('WARNING: VDS file has already been closed')
 
     def getCalibrateModule(self, snap_idx: int, module_idx: int):
         """Get the array of a calibrated module.
@@ -128,33 +147,22 @@ class cxiData():
     @property
     def data(self):
         """The raw data in shape (#snapshots, 16, 2, 512, 128)"""
-        vds = h5py.File(self.fname, 'r')
-        # Make sure all the h5py objects are returned as property, instead of attribute.
-        # Otherwise it's hard to parallellize with mp.pool.map
-        return vds[self.dset_name]
+        return self.vds[self.dset_name]
 
     @property
     def trainIDs(self):
         """The trainIDs in an array of the size = #snapshots"""
-        vds = h5py.File(self.fname, 'r')
-        return vds[self.train_name]
+        return self.vds[self.train_name]
 
     @property
     def pulseIDs(self):
         """The pulseIDs in an array of the size = #snapshots"""
-        vds = h5py.File(self.fname, 'r')
-        return vds[self.pulse_name]
+        return self.vds[self.pulse_name]
 
     @property
     def cellIDs(self):
         """The cellIDs in an array of the shape = (#snapshots, 16)"""
-        vds = h5py.File(self.fname, 'r')
-        return vds[self.cell_name]
-
-    @property
-    def calib(self):
-        """The list of calibration h5 handler"""
-        return [h5py.File(f, 'r') for f in self.calib_files]
+        return self.vds[self.cell_name]
 
     def setGeom(
         self,
@@ -175,6 +183,7 @@ class cxiData():
         calib_glob = '%s/Cheetah*.h5' % calib_path
         self.calib_glob = calib_glob
         self.calib_files = sorted(glob.glob(calib_glob))
+        self.calib = [h5py.File(f, 'r') for f in self.calib_files]
         if self.verbose > 0:
             print('%d calibration files found' % len(self.calib_files))
 
