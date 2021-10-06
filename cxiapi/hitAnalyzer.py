@@ -1,154 +1,111 @@
-import sys
-import re
-import os
+#!/usr/bin/env python
+# coding: utf-8
+
 import numpy as np
-from numpy import ndarray
-import multiprocessing as mp
 import h5py
-from p_tqdm import p_umap, p_map
-import matplotlib.pyplot as plt
+from pathlib import Path
 from cxiapi import cxiData, calibrateFixedGainModule
+import matplotlib.pyplot as plt
+from p_tqdm import p_umap
 from functools import partial
+import multiprocessing as mp
+
+# Experiment run number.
+run = 364
+# The folder of cxi files
+cxi_folder = '/gpfs/exfel/u/scratch/SPB/202130/p900201/spi-comission/vds/'
+# Cheetah files folder for calibration
+calib_folder = '/gpfs/exfel/exp/SPB/202130/p900201/usr/Software/calib/r0361-r0362-r0363/'
+# Geometry file for the detector
+geom_file = '/gpfs/exfel/exp/SPB/202130/p900201/usr/Software/geom/agipd_2696_v5.geom'
+
+cxi_path = Path(cxi_folder, f'r{run:04}.cxi')
+fn = str(cxi_path)
+
+cxi = cxiData(fn, verbose=1, debug=0)
+pulse = np.arange(0, 352)
+base_pulse_filter = np.ones(600, dtype="bool")
+base_pulse_filter[len(pulse):] = False
+base_pulse_filter[0] = False
+base_pulse_filter[18::32] = False
+base_pulse_filter[29::32] = False
+good_cells = pulse[base_pulse_filter[:len(pulse)]]
+cxi.setGoodCells(good_cells)
+cxi.setCalib(calib_folder)
+
+# Hitfinding on which module.
+module_index = 15
+intens_thresh = 5
+adu_per_photon = 45
+
+# Fixed gain
+cxi.setGainMode(0)
+cxi.setADU_per_photon(adu_per_photon)
+# ROI
+ROI = (slice(512 - 50, None), slice(None, 51))
+cxi.setROI(ROI)
+# Mask
+# cxi.plot(300,module_index,ADU=False,transpose=True)
+# plt.title('Before mask')
+
+mask = np.ones((512, 128))
+mask[470:473, 15:18] = 0
+cxi.setModuleMasks(15, mask)
+# cxi.plot(300,module_index,ADU=False,transpose=True)
+# plt.title('After mask')
+
+# Parallel cell
+data = cxi.data
+good_frames = cxi.good_frames
+cell_ids = cxi.cellIDs
+gain_mode = cxi.gain_mode
+calib = cxi.calib
 
 
-class hitAnalyzer():
-    """The analyzer to get hit snapshots of a cxiData. It's dedicated to fixed gain mode so far."""
-    def __init__(self, cxi_data: cxiData, verbose: int = 0):
-        super(hitAnalyzer, self).__init__()
-        self.cxi_data = cxi_data
-        self.verbose = verbose
-        self.module_masks = {}
-        self.hit_results = {}
-        try:
-            self.setRunNumber()
-        except:
-            self.run = None
-
-    def setRunNumber(self, run: int = None):
-        """Set the run number of this classs.
-
-        Args:
-            run (int, optional): The run number to set. Defaults to None meaning to
-            set from the cxi file name.
-        """
-        if run is None:
-            rname = os.path.basename(self.cxi_data.fname).split('_')[0]
-            self.run = int(re.findall(r'\d+', rname)[0])
-        else:
-            self.run = run
-
-    def setROI(self, ROI):
-        self.ROI = ROI
-        assert len(ROI) == 2
-
-    def setAdu_per_photon(self, value=45):
-        self.adu_per_photon = value
-
-    def setModuleMasks(self, module_index, mask):
-        self.module_masks[str(module_index)] = mask
-
-    def toPhotons(self, calib_data):
-        """Convert ADU to photons.
-
-        Args:
-            calib_data (ndarray): The ADU data array.
-
-        Returns:
-            ndarray: Photons array.
-        """
-        nphotons = calib_data / self.adu_per_photon
-        nphotons[nphotons < 0.5] = 0
-        return nphotons
-
-    def getROIdata(self, snap_idx, module_index, ROI=None):
-        if ROI is None:
-            my_ROI = self.ROI
-        else:
-            my_ROI = ROI
-        calib_data = self.cxi_data.getCalibrateModule(snap_idx, module_index)
-        roi_data = calib_data[my_ROI] * self.module_masks[str(
-            module_index)][my_ROI]
-        return roi_data
-
-    def getROIphoton(self, snap_idx, module_index, ROI=None):
-        roi_data = self.getROIdata(snap_idx, module_index, ROI)
-        nphotons = self.toPhotons(roi_data)
-        return nphotons
-
-    def plotModule(self, snap_idx, module_index, is_transpose=False):
-        calib_data = self.cxi_data.getCalibrateModule(snap_idx, module_index)
-        nphotons = self.toPhotons(calib_data)
-        if is_transpose:
-            nphotons = nphotons.transpose()
-        plt.figure()
-        plt.imshow(nphotons, vmax=2, origin='lower')
-
-    def plotROI(self, snap_idx, module_index, ROI=None, is_transpose=False, save_fn:str=None):
-        if ROI is None:
-            my_ROI = self.ROI
-        else:
-            my_ROI = ROI
-        calib_data = self.cxi_data.getCalibrateModule(snap_idx, module_index)
-        roi_data = calib_data[my_ROI] * self.module_masks[str(
-            module_index)][my_ROI]
-        nphotons = self.toPhotons(roi_data)
-
-        data_indices = np.indices(calib_data.shape)
-        row_max = np.max(data_indices[0][my_ROI])
-        row_min = np.min(data_indices[0][my_ROI])
-        col_max = np.max(data_indices[1][my_ROI])
-        col_min = np.min(data_indices[1][my_ROI])
-        extent = [col_min, col_max, row_min, row_max]
-
-        if is_transpose:
-            nphotons = nphotons.transpose()
-            extent = [row_min, row_max, col_min, col_max]
-        plt.figure()
-        figure_title = f'run {self.run} - snapshot {snap_idx} - module {module_index}'
-        plt.title(figure_title)
-        plt.imshow(nphotons, vmax=2, origin='lower', extent=extent)
-        if save_fn is not None:
-            plt.savefig(save_fn)
-
-    def getHits(self, idx_range: list, module_index,
-                intens_thresh: float) -> None:
-        num_cpus = checkChuck(len(idx_range), chuckSize=25000)
-        if self.verbose > 0:
-            print(f'Using {num_cpus} CPU cores.')
-        results = p_umap(partial(check_snapshot,
-                                 module_index=module_index,
-                                 threshold=intens_thresh,
-                                 ROI=self.ROI,
-                                 adu_per_photon=self.adu_per_photon,
-                                 mask=self.module_masks[str(module_index)],
-                                 fname=self.cxi_data.fname,
-                                 dset_name=self.cxi_data.dset_name,
-                                 cell_name=self.cxi_data.cell_name,
-                                 calib_files=self.cxi_data.calib_files,
-                                 mode=self.cxi_data.gain_mode),
-                         idx_range,
-                         num_cpus=num_cpus)
-        hits_indices = list(filter((None).__ne__, results))
-        self.hit_results['hits_indices'] = hits_indices
+def getHits(idx_range: list) -> list:
+    # Get the index of the hits
+    num_cpus = checkChuck(len(idx_range), chuckSize=25000)
+    print(f'Using {num_cpus} CPU cores.')
+    results = p_umap(partial(check_snapshot, module_index=15),
+                     idx_range,
+                     num_cpus=num_cpus)
+    results = list(filter((None).__ne__, results))
+    hit_results = np.array(results)
+    hits_indices = hit_results[:, 0]
+    hits_scores = hit_results[:, 1]
+    return hits_indices, hits_scores
 
 
-def check_snapshot(snap_idx, module_index, threshold, ROI, adu_per_photon, mask,
-                   fname, dset_name, cell_name, calib_files, mode):
-    with h5py.File(fname, 'r') as h5:
-        data = h5[dset_name]
-        cellIDs = h5[cell_name]
-        calib_data = calibrateFixedGainModule(
-            data[snap_idx, module_index, 0, :, :], data[snap_idx, module_index,
-                                                      1, :, :], mode,
-            module_index, cellIDs[snap_idx, module_index], calib_files)
+def getCalibData(snap_idx, module_index):
+    n = snap_idx
+    calib_data = calibrateFixedGainModule(data[n, module_index, 0, :, :],
+                                          data[n, module_index,
+                                               1, :, :], gain_mode,
+                                          module_index, cell_ids[n, 0], calib)
+    return calib_data
+
+
+def check_snapshot(snap_idx, module_index):
+    calib_data = getCalibData(snap_idx, module_index)
     roi_data = calib_data[ROI] * mask[ROI]
     nphotons = roi_data / adu_per_photon
     nphotons[nphotons < 0.5] = 0
-    if threshold < np.log(nphotons.sum()):
-        return snap_idx
+    hit_score = np.log(nphotons.sum())
+    if intens_thresh < hit_score:
+        return snap_idx, hit_score
+    else:
+        return None
 
 
 def checkChuck(ntask, chuckSize):
     num_cpu = min(mp.cpu_count(), ntask // chuckSize)
     num_cpu = max(num_cpu, 1)
     return num_cpu
+
+
+idx_range = good_frames
+hits_indices, hits_scores = getHits(idx_range)
+
+with h5py.File(f'{run}_hits.h5', 'w') as h5:
+    h5["hits_indices"] = hits_indices
+    h5["hits_scores"] = hits_scores
