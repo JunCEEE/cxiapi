@@ -302,7 +302,7 @@ class cxiData():
              ROI: list = None,
              module_mask: ndarray = None,
              ADU: bool = True,
-             transponse: bool = False,
+             transpose: bool = False,
              **kwargs):
         if ROI is None:
             ROI = self.ROI
@@ -317,7 +317,7 @@ class cxiData():
                                                    module_mask, ADU)
             if not ADU:
                 kwargs['vmax'] = kwargs.pop('vmax', 2)
-            plotModule(calib_data, ROI, transponse, **kwargs)
+            plotModule(calib_data, ROI, transpose, **kwargs)
 
 
 def plotDetector(assemble_detector: ndarray, ROI: list = None, **kwargs):
