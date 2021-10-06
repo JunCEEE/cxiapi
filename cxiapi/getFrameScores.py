@@ -1,17 +1,20 @@
 #!/usr/bin/env python
 # coding: utf-8
+"""Get the frame scores for a run"""
 
+import sys
 import numpy as np
 import h5py
 from pathlib import Path
-from cxiapi import cxiData, calibrateFixedGainModule
+from cxiapi import cxiData, calibrateFixedGainModule, value2ROI
+from hitsAnalyzer import plotFrameScores
 import matplotlib.pyplot as plt
 from p_tqdm import p_umap
 from functools import partial
 import multiprocessing as mp
 
 # Experiment run number.
-run = 364
+run = int(sys.argv[1])
 # The folder of cxi files
 cxi_folder = '/gpfs/exfel/u/scratch/SPB/202130/p900201/spi-comission/vds/'
 # Cheetah files folder for calibration
@@ -32,6 +35,7 @@ base_pulse_filter[29::32] = False
 good_cells = pulse[base_pulse_filter[:len(pulse)]]
 cxi.setGoodCells(good_cells)
 cxi.setCalib(calib_folder)
+cxi.setGeom(geom_file)
 
 # Hitfinding on which module.
 module_index = 15
@@ -42,8 +46,10 @@ adu_per_photon = 45
 cxi.setGainMode(0)
 cxi.setADU_per_photon(adu_per_photon)
 # ROI
-ROI = (slice(512 - 50, None), slice(None, 51))
-cxi.setROI(ROI)
+ROI_val = ((512 - 50, None), (None, 51))
+ROI = value2ROI(ROI_val)
+# ROI = (slice(512 - 50, None), slice(None, 51))
+cxi.setROI(ROI_val)
 # Mask
 # cxi.plot(300,module_index,ADU=False,transpose=True)
 # plt.title('Before mask')
@@ -62,18 +68,14 @@ gain_mode = cxi.gain_mode
 calib = cxi.calib
 
 
-def getHits(idx_range: list) -> list:
+def getHitScore(idx_range: list) -> list:
     # Get the index of the hits
     num_cpus = checkChuck(len(idx_range), chuckSize=25000)
     print(f'Using {num_cpus} CPU cores.')
     results = p_umap(partial(check_snapshot, module_index=15),
                      idx_range,
                      num_cpus=num_cpus)
-    results = list(filter((None).__ne__, results))
-    hit_results = np.array(results)
-    hits_indices = hit_results[:, 0]
-    hits_scores = hit_results[:, 1]
-    return hits_indices, hits_scores
+    return np.array(results)
 
 
 def getCalibData(snap_idx, module_index):
@@ -91,10 +93,7 @@ def check_snapshot(snap_idx, module_index):
     nphotons = roi_data / adu_per_photon
     nphotons[nphotons < 0.5] = 0
     hit_score = np.log(nphotons.sum())
-    if intens_thresh < hit_score:
-        return snap_idx, hit_score
-    else:
-        return None
+    return hit_score
 
 
 def checkChuck(ntask, chuckSize):
@@ -103,9 +102,25 @@ def checkChuck(ntask, chuckSize):
     return num_cpu
 
 
-idx_range = good_frames
-hits_indices, hits_scores = getHits(idx_range)
+def replaceNone(input: list):
+    arr = np.array(input)
+    arr[arr == None] = np.inf
+    return arr.astype(float)
+
+
+idx_range = good_frames[:1000]
+frame_scores = getHitScore(idx_range)
+plotFrameScores(run, frame_scores)
 
 with h5py.File(f'{run}_hits.h5', 'w') as h5:
-    h5["hits_indices"] = hits_indices
-    h5["hits_scores"] = hits_scores
+    h5["cxi_fname"] = cxi.fname
+    h5["cxi_calib_folder"] = calib_folder
+    h5["cxi_geom_file"] = geom_file
+    h5["cxi_gain_mode"] = cxi.gain_mode
+    h5["cxi_ROI_value"] = replaceNone(cxi.ROI_value)
+    h5["frame_indices"] = idx_range
+    h5["frame_scores"] = frame_scores
+    if len(cxi.module_masks) > 0:
+        grp = h5.create_group('module_masks')
+        for key, value in cxi.module_masks.items():
+            grp[key] = value
