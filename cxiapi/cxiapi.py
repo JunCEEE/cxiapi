@@ -28,8 +28,8 @@ class cxiData():
             (dset_shape[1], dset_shape[3], dset_shape[4]))
         self.debug = debug
 
-        self.ROI = [slice(None), slice(None)]
-        self.module_masks = {}
+        self.cleanROI()
+        self.cleanModuleMasks()
 
     def checkVDS(self):
         """Check vds basic info"""
@@ -201,20 +201,20 @@ class cxiData():
             else:
                 raise TypeError("'good_cells' has to be list-like.")
 
-    def setROI(self, ROI: list):
+    def setROI(self, ROI_value: list):
         """Set Region of Intrest slices for data analysis
 
         Args:
-            ROI (list): a list of 2 slices.
-            Example: `cxi.setROI(slice(400, None), slice(None, 500))` is to set row > 400 and col < 500.
+            ROI (list): a list (len =2) of the ROI range of rows and cols: [[row_low, row_high], [col_low, col_high]].
+            Example: `cxi.setROI([400, None], [None, 500]]` is to set row > 400 and col < 500.
         """
-        self.ROI = ROI
-        assert len(ROI) == 2
-        assert isinstance(ROI[0], slice) is True
-        assert isinstance(ROI[1], slice) is True
+        self.ROI_value = ROI_value
+        self.ROI = value2ROI(ROI_value)
+        assert len(ROI_value) == 2
 
     def cleanROI(self):
-        self.ROI = [slice(None), slice(None)]
+        self.ROI_value = [[None, None], [None, None]]
+        self.ROI = value2ROI(self.ROI_value)
 
     def setModuleMasks(self, module_idx: int, mask):
         self.module_masks[str(module_idx)] = mask
@@ -242,6 +242,18 @@ class cxiData():
                              module_idx: int = None,
                              module_mask: ndarray = None,
                              ADU: bool = True):
+        """Get post processed data without ROI.
+
+        Args:
+            snap_idx (int): Snaphost index
+            module_idx (int, optional): Module index. Defaults to None, meaning the whole detector.
+            module_mask (ndarray, optional): Overrides the mask of one module (only applies to one module plot). Defaults using module_masks
+            for both single and multiple module.
+            ADU (bool, optional): Plot the data in AUD unit instead of number of photons. Defaults to True.
+
+        Returns:
+            ndarray: Processed data without ROI.
+        """
 
         if module_idx is None:
             # Return the whole detector
@@ -275,13 +287,14 @@ class cxiData():
     def plot(self,
              snap_idx: int,
              module_idx: int = None,
-             ROI: list = None,
+             ROI_value: list = None,
              module_mask: ndarray = None,
              ADU: bool = True,
              transpose: bool = False,
              **kwargs):
-        if ROI is None:
-            ROI = self.ROI
+        if ROI_value is None:
+            ROI_value = self.ROI_value
+        ROI = value2ROI(ROI_value)
         if module_idx is None:
             calib_detector = self.getPostProcessedData(snap_idx, module_idx,
                                                        module_mask, ADU)
@@ -425,3 +438,9 @@ def gainThreshold(gain, module, cell, calib):
     low_gain = gain > threshold[2]
     medium_gain = (~high_gain) * (~low_gain)
     return low_gain * 2 + medium_gain
+
+
+def value2ROI(ROI_value: list):
+    ROI = (slice(ROI_value[0][0],
+                 ROI_value[0][1]), slice(ROI_value[1][0], ROI_value[1][1]))
+    return ROI
