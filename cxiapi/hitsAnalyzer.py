@@ -10,23 +10,30 @@ from cxiapi import cxiData
 from functools import partial
 
 
-class hitAnalyzer():
+class hitsAnalyzer():
     """The analyzer to get hit snapshots of a cxiData. It's dedicated to fixed gain mode so far."""
     def __init__(self, hits_fn: str, verbose: int = 0):
-        super(hitAnalyzer, self).__init__()
+        super(hitsAnalyzer, self).__init__()
         self.verbose = verbose
         self.hits_results = {}
         self.hits_fn = hits_fn
+        self.input = {}
         self._readScores()
 
     def _readScores(self):
         with h5py.File(self.hits_fn, 'r') as h5:
-            self.frame_indices = h5['frame_indices'][()]
-            self.frame_scores = h5['frame_scores'][()]
+            for grp, value in h5.items():
+                try:
+                    self.input[grp] = value[()]
+                except AttributeError:
+                    self.input[grp] = {}
+                    for key in h5[grp]:
+                        self.input[grp][key] = h5[grp][key][()]
+        self.input['cxi_ROI_value'] = replaceInf(self.input['cxi_ROI_value'])
 
-    def getHits(self, cxi: cxiData, score_thresh: float = None) -> None:
-        if intens_thresh < np.log(nphotons.sum()):
-            return snap_idx
+    # def getHits(self, cxi: cxiData, score_thresh: float = None) -> None:
+    #     if intens_thresh < np.log(nphotons.sum()):
+    #         return snap_idx
 
 
 def plotFrameScores(run: int, frame_scores):
@@ -49,3 +56,14 @@ def plotFrameScores(run: int, frame_scores):
     plt.ylabel('Frequency')
     plt.xlabel('Frame scores')
     plt.savefig(f'{run}_frame_scores.png', dpi=100)
+
+
+def replaceInf(arr: ndarray):
+    my_list = arr.tolist()
+    for i in range(2):
+        for j in range(2):
+            if my_list[i][j] == np.inf:
+                my_list[i][j] = None
+            else:
+                my_list[i][j] = int(my_list[i][j])
+    return my_list
