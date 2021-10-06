@@ -32,8 +32,9 @@ class hitAnalyzer():
             self.run = run
 
     def getHits(self, cxi: cxiData, idx_range: list, module_idx: int,
-                intens_thresh: float) -> None:
-        num_cpus = checkChuck(len(idx_range), chuckSize=25000)
+                intens_thresh: float, num_cpus = None) -> None:
+        if num_cpus is None:
+            num_cpus = checkChuck(len(idx_range), chuckSize=25000)
         if self.verbose > 0:
             print(f'Using {num_cpus} CPU cores.')
         results = p_umap(partial(check_snapshot,
