@@ -38,11 +38,19 @@ Installation for EuXFEL
     $ git clone https://github.com/JunCEEE/cxiapi.git
     $ cd cxiapi
     $ pip install --user ./
+    
+Create cxi files for analysis
+-----------------------------
+Take run 0372 as an example:
 
+.. code-block:: bash
+
+    $ extra-data-make-virtual-cxi /gpfs/exfel/exp/SPB/202130/p900201/raw/r0372 -o r0372.cxi 
+ 
 Credits
 -------
+Juncheng E at European XFEL writes the codes.
 
 This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypackage`_ project template.
-
 .. _Cookiecutter: https://github.com/audreyr/cookiecutter
 .. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage
