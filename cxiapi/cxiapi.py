@@ -298,18 +298,22 @@ class cxiData():
         if module_idx is None:
             calib_detector = self.getPostProcessedData(snap_idx, module_idx,
                                                        module_mask, ADU)
-            if not ADU:
-                kwargs['vmax'] = kwargs.pop('vmax', 2)
-            plotDetector(self.assembleDetector(calib_detector), ROI, **kwargs)
+            # if not ADU:
+            #     kwargs['vmax'] = kwargs.pop('vmax', 2)
+            plotDetector(self.assembleDetector(calib_detector), ROI, transpose,
+                         **kwargs)
         else:
             calib_data = self.getPostProcessedData(snap_idx, module_idx,
                                                    module_mask, ADU)
-            if not ADU:
-                kwargs['vmax'] = kwargs.pop('vmax', 2)
+            # if not ADU:
+            #     kwargs['vmax'] = kwargs.pop('vmax', 2)
             plotModule(calib_data, ROI, transpose, **kwargs)
 
 
-def plotDetector(assemble_detector: ndarray, ROI: list = None, **kwargs):
+def plotDetector(assemble_detector: ndarray,
+                 ROI: list = None,
+                 transpose=False,
+                 **kwargs):
     data_indices = np.indices(assemble_detector.shape)
     row_max = np.max(data_indices[0][ROI])
     row_min = np.min(data_indices[0][ROI])
@@ -319,9 +323,14 @@ def plotDetector(assemble_detector: ndarray, ROI: list = None, **kwargs):
     kwargs['origin'] = kwargs.pop('origin', 'lower')
 
     plt.figure(figsize=(8, 8))
-    plt.imshow(assemble_detector, **kwargs)
-    plt.xlim(col_max, col_min)
-    plt.ylim(row_min, row_max)
+    if transpose:
+        plt.imshow(assemble_detector.transpose(), **kwargs)
+        plt.ylim(col_max, col_min)
+        plt.xlim(row_min, row_max)
+    else:
+        plt.imshow(assemble_detector, **kwargs)
+        plt.xlim(col_max, col_min)
+        plt.ylim(row_min, row_max)
     plt.colorbar()
 
 
