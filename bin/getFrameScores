@@ -7,18 +7,22 @@ import numpy as np
 import h5py
 from pathlib import Path
 from cxiapi import cxiData, calibrateFixedGainModule, value2ROI
-from cxiapi.hitsAnalyzer import plotFrameScores
+from cxiapi.hitsAnalyzer import plotHist
 import matplotlib.pyplot as plt
 from p_tqdm import p_umap
 from functools import partial
 import multiprocessing as mp
 
 
-def getHitScore(idx_range: list) -> list:
+def getHitScore(idx_range: list, num_cpus=0, photon_thresh=0.5) -> list:
     # Get the index of the hits
-    num_cpus = checkChuck(len(idx_range), chuckSize=25000)
+    if num_cpus == 0:
+        num_cpus = checkChuck(len(idx_range), chuckSize=25000)
     print(f'Using {num_cpus} CPU cores.')
-    results = p_umap(partial(check_snapshot, module_index=module_index),
+    print(f'Photon threshold: {photon_thresh}')
+    results = p_umap(partial(check_snapshot,
+                             module_index=module_index,
+                             photon_thresh=photon_thresh),
                      idx_range,
                      num_cpus=num_cpus)
     return np.array(results)
@@ -33,13 +37,15 @@ def getCalibData(snap_idx, module_index):
     return calib_data
 
 
-def check_snapshot(snap_idx, module_index):
+def check_snapshot(snap_idx, module_index, photon_thresh=0.5):
     calib_data = getCalibData(snap_idx, module_index)
-    roi_data = calib_data[ROI] * mask[ROI]
-    nphotons = roi_data / adu_per_photon
-    nphotons[nphotons < 0.5] = 0
-    hit_score = np.log(nphotons.sum())
-    return hit_score
+    nphotons = calib_data / adu_per_photon * mask
+    nphotons[nphotons < photon_thresh] = 0
+    lit_pixels_module = np.count_nonzero(nphotons)
+    nphotons_ROI = nphotons[ROI]
+    intensity_score_ROI = np.log(nphotons_ROI.sum())
+    lit_pixels_ROI = np.count_nonzero(nphotons_ROI)
+    return snap_idx, intensity_score_ROI, lit_pixels_ROI, lit_pixels_module
 
 
 def checkChuck(ntask, chuckSize):
@@ -63,10 +69,21 @@ if __name__ == "__main__":
                         default=0,
                         type=int,
                         help='Number of frames to deal with.')
+    parser.add_argument('--ncpu',
+                        default=0,
+                        type=int,
+                        help='Number of CPUs for calculation.')
+    parser.add_argument('-t',
+                        '--thresh',
+                        default=0.5,
+                        type=int,
+                        help='Photon threshold for frame score, default=0.5')
     parser.add_argument('run', help='Run number', type=int)
     args = parser.parse_args()
     run = args.run
     nframes = args.nframes
+    ncpu = args.ncpu
+    photon_thresh = args.thresh
 
     # run = int(sys.argv[1])
     # The folder of cxi files
@@ -124,8 +141,14 @@ if __name__ == "__main__":
         idx_range = good_frames
     else:
         idx_range = good_frames[:nframes]
-    frame_scores = getHitScore(idx_range)
-    plotFrameScores(run, frame_scores)
+    results = getHitScore(idx_range, ncpu, photon_thresh=photon_thresh)
+    frame_indices = results[:, 0].astype(int)
+    intensity_scores_ROI = results[:, 1]
+    lit_pixels_ROI = results[:, 2].astype(int)
+    lit_pixels_module = results[:, 3].astype(int)
+    plotHist(run, intensity_scores_ROI, 'intensity_scores_ROI')
+    plotHist(run, lit_pixels_ROI, 'lit_pixels_ROI')
+    plotHist(run, lit_pixels_module, 'lit_pixels_module')
 
     output_fn = f'r{run:04}_hits.h5'
     with h5py.File(output_fn, 'w') as h5:
@@ -134,17 +157,22 @@ if __name__ == "__main__":
         h5["cxi_calib_folder"] = calib_folder
         h5["cxi_geom_file"] = geom_file
         h5["cxi_gain_mode"] = cxi.gain_mode
+        h5["cxi_adu_per_photon"] = adu_per_photon
+        h5["cxi_adu_per_photon"].attrs[
+            'description'] = 'The adu_per_photon used for frame score calcualtion'
         h5["hits_ROI_value"] = replaceNone(cxi.ROI_value)
         h5["hits_ROI_value"].attrs[
             'description'] = 'The ROI setting for frame score calculation'
         h5["hits_module"] = module_index
         h5["hits_module"].attrs[
             'description'] = 'The module used for frame score calcualtion'
-        h5["hits_adu_per_photon"] = adu_per_photon
-        h5["hits_adu_per_photon"].attrs[
-            'description'] = 'The adu_per_photon used for frame score calcualtion'
-        h5["frame_indices"] = idx_range
-        h5["frame_scores"] = frame_scores
+        h5["hits_photon_thresh"] = photon_thresh
+        h5["hits_photon_thresh"].attrs[
+            'description'] = 'The photon threshold for lit_pixels and intensity_scores'
+        h5["frame_indices"] = frame_indices
+        h5["lit_pixels_ROI"] = lit_pixels_ROI
+        h5["lit_pixels_module"] = lit_pixels_module
+        h5["intensity_scores_ROI"] = intensity_scores_ROI
         if len(cxi.module_masks) > 0:
             grp = h5.create_group('module_masks')
             grp.attrs[
