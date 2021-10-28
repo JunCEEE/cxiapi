@@ -139,9 +139,9 @@ class hitsAnalyzer():
                 "'snap_idx' and 'frame_idx' should NOT be set at the same time."
             )
 
-        if frame_idx:
+        if frame_idx is not None:
             snap_idx = self.frame_indices[frame_idx]
-        elif snap_idx:
+        elif snap_idx is not None:
             frame_idx = np.where(self.frame_indices == snap_idx)[0][0]
         else:
             raise ValueError(
@@ -186,9 +186,9 @@ class hitsAnalyzer():
                 "'snap_idx' and 'frame_idx' should NOT be set at the same time."
             )
 
-        if frame_idx:
+        if frame_idx is not None:
             snap_idx = self.frame_indices[frame_idx]
-        elif snap_idx:
+        elif snap_idx is not None:
             frame_idx = np.where(self.frame_indices == snap_idx)[0][0]
         else:
             raise ValueError(

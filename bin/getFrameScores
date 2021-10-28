@@ -28,17 +28,8 @@ def getHitScore(idx_range: list, num_cpus=0, photon_thresh=0.5) -> list:
     return np.array(results)
 
 
-def getCalibData(snap_idx, module_index):
-    n = snap_idx
-    calib_data = calibrateFixedGainModule(data[n, module_index, 0, :, :],
-                                          data[n, module_index,
-                                               1, :, :], gain_mode,
-                                          module_index, cell_ids[n, 0], calib)
-    return calib_data
-
-
 def check_snapshot(snap_idx, module_index, photon_thresh=0.5):
-    calib_data = getCalibData(snap_idx, module_index)
+    calib_data = cxi.getCalibrateModule(snap_idx, module_index)
     scores = getScore(calib_data, adu_per_photon, mask, ROI, photon_thresh)
     intensity_score_ROI = scores[0]
     lit_pixels_ROI = scores[1]
@@ -140,12 +131,13 @@ if __name__ == "__main__":
     else:
         idx_range = good_frames[:nframes]
     results = getHitScore(idx_range, ncpu, photon_thresh=photon_thresh)
+    # results = getHitScore([383461], ncpu, photon_thresh=photon_thresh)
     frame_indices = results[:, 0].astype(int)
     intensity_scores_ROI = results[:, 1]
     lit_pixels_ROI = results[:, 2].astype(int)
     lit_pixels_module = results[:, 3].astype(int)
 
-    output_fn = f'r{run:04}_hits.h5'
+    output_fn = f'r{run:04}_hits_test.h5'
     with h5py.File(output_fn, 'w') as h5:
         h5["run"] = run
         h5["cxi_fname"] = cxi.fname
