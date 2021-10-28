@@ -144,9 +144,6 @@ if __name__ == "__main__":
     intensity_scores_ROI = results[:, 1]
     lit_pixels_ROI = results[:, 2].astype(int)
     lit_pixels_module = results[:, 3].astype(int)
-    plotHist(run, intensity_scores_ROI, 'intensity_scores_ROI')
-    plotHist(run, lit_pixels_ROI, 'lit_pixels_ROI')
-    plotHist(run, lit_pixels_module, 'lit_pixels_module')
 
     output_fn = f'r{run:04}_hits.h5'
     with h5py.File(output_fn, 'w') as h5:
@@ -178,3 +175,7 @@ if __name__ == "__main__":
             for key, value in cxi.module_masks.items():
                 grp[key] = value
     print(f'Written in {output_fn}')
+
+    plotHist(run, intensity_scores_ROI, 'intensity_scores_ROI')
+    plotHist(run, lit_pixels_ROI, 'lit_pixels_ROI')
+    plotHist(run, lit_pixels_module, 'lit_pixels_module')

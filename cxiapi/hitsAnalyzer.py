@@ -1,6 +1,7 @@
 import numpy as np
 from numpy import ndarray
 import h5py
+from pathlib import Path
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from cxiapi import cxiData, value2ROI
@@ -217,7 +218,7 @@ class hitsAnalyzer():
                  vmin=None,
                  vmax=4,
                  order='descending',
-                 save=False):
+                 save_folder=None):
         # The number 1180-1189 is meant to prevent the abnormal data due to detector misbehavior.
         # threshold_idx = np.where((self.intensity_scores_ROI > inten_lim[0])
         #                          & (self.lit_pixels_ROI > lp_lim[0])
@@ -246,6 +247,10 @@ class hitsAnalyzer():
         else:
             raise ValueError("Available 'order': 'descending' or 'ascending'")
 
+        if (save_folder):
+            save_root = Path(save_folder)
+            save_root.mkdir(parents=True, exist_ok=True)
+
         for num, i in enumerate(tqdm(ind)):
             snap_idx = self.frame_indices[threshold_idx][i]
             if (num < 10):
@@ -254,12 +259,14 @@ class hitsAnalyzer():
                 print('...')
             frame_idx = threshold_idx[i]
             self.plotHitModule(frame_idx=frame_idx, vmin=vmin, vmax=vmax)
-            if (save):
-                plt.savefig(f'r{self.run:04}_{num:04}_module.png', dpi=100)
+            if (save_folder):
+                save_path = save_root / f'r{self.run:04}_{num:04}_module.png'
+                plt.savefig(str(save_path), dpi=100)
                 plt.close()
             self.plotHitAppend(frame_idx=frame_idx, vmin=vmin, vmax=vmax)
-            if (save):
-                plt.savefig(f'r{self.run:04}_{num:04}_append.png', dpi=100)
+            if (save_folder):
+                save_path = save_root / f'r{self.run:04}_{num:04}_append.png'
+                plt.savefig(str(save_path), dpi=100)
                 plt.close()
 
 
