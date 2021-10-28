@@ -107,17 +107,11 @@ if __name__ == "__main__":
     # ROI
     ROI_val = ((512 - 50, None), (None, 51))
     ROI = value2ROI(ROI_val)
-    # ROI = (slice(512 - 50, None), slice(None, 51))
     cxi.setROI(ROI_val)
     # Mask
-    # cxi.plot(300,module_index,ADU=False,transpose=True)
-    # plt.title('Before mask')
-
     mask = np.ones((512, 128))
     mask[470:473, 15:18] = 0
     cxi.setModuleMasks(15, mask)
-    # cxi.plot(300,module_index,ADU=False,transpose=True)
-    # plt.title('After mask')
 
     # Parallel cell
     data = cxi.data
@@ -130,14 +124,20 @@ if __name__ == "__main__":
         idx_range = good_frames
     else:
         idx_range = good_frames[:nframes]
+
+    # DEGBUG
+    # results = getHitScore([383460, 383461], ncpu, photon_thresh=photon_thresh)
+
     results = getHitScore(idx_range, ncpu, photon_thresh=photon_thresh)
-    # results = getHitScore([383461], ncpu, photon_thresh=photon_thresh)
     frame_indices = results[:, 0].astype(int)
     intensity_scores_ROI = results[:, 1]
     lit_pixels_ROI = results[:, 2].astype(int)
     lit_pixels_module = results[:, 3].astype(int)
 
-    output_fn = f'r{run:04}_hits_test.h5'
+    # DEGBUG
+    # output_fn = f'r{run:04}_hits_test.h5'
+
+    output_fn = f'r{run:04}_hits.h5'
     with h5py.File(output_fn, 'w') as h5:
         h5["run"] = run
         h5["cxi_fname"] = cxi.fname
