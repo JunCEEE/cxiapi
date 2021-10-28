@@ -3,7 +3,7 @@ from numpy import ndarray
 import h5py
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from cxiapi import cxiData
+from cxiapi import cxiData, value2ROI
 
 
 class hitsAnalyzer():
@@ -38,6 +38,7 @@ class hitsAnalyzer():
         self.lit_pixels_module = self.input['lit_pixels_module']
         self.intensity_scores_ROI = self.input['intensity_scores_ROI']
         self.frame_indices = self.input['frame_indices']
+        self.module_masks = self.input['module_masks']
         self.run = self.input['run']
 
     def __init_cxi(self):
@@ -56,6 +57,64 @@ class hitsAnalyzer():
         plotHist(self.run, self.intensity_scores_ROI, 'intensity_scores_ROI')
         plotHist(self.run, self.lit_pixels_ROI, 'lit_pixels_ROI')
         plotHist(self.run, self.lit_pixels_module, 'lit_pixels_module')
+
+    def plotHitModuleLocal(self,
+                           snap_idx=None,
+                           ROI='hits_ROI',
+                           vmin=None,
+                           vmax=4):
+        """Plot a hit-finding module with hits information.
+
+        Args:
+            snap_idx (int): The snap index in the original cxi file. Defaults to None.
+            ROI (str or list, optional): The ROI to apply. Defaults to 'hits_ROI' to apply the ROI used for the score
+            calculation. `None` means applying no ROI.
+            vmin (float, optional): The lower colorbar limit. Defaults to None.
+            vmax (float, optional): The higher colorbar limit. Defaults to 4.
+        """
+        run = self.run
+
+        if ROI == 'hits_ROI':
+            ROI = self.hits_ROI_value
+
+        scores = self.getScore(snap_idx)
+        score = scores[0]
+        lit_pixels = scores[1]
+        lit_pixels_module = scores[2]
+        title_txt = f'run {run} - shot {snap_idx} - IS {score:.3} - LP {lit_pixels} - LPM {lit_pixels_module}'
+
+        self.cxi.plot(snap_idx,
+                      self.hits_module,
+                      ADU=False,
+                      transpose=True,
+                      ROI_value=ROI,
+                      vmax=vmax,
+                      vmin=vmin)
+        plt.title(title_txt)
+
+    def plotHitAppendLocal(self,
+                           snap_idx=None,
+                           ROI=((500, 800), (430, 700)),
+                           vmin=None,
+                           vmax=4):
+        """Plot a hit-finding append image with hits information.
+
+        Args:
+            snap_idx (int): The snap index in the original cxi file. Defaults to None.
+            ROI (str or list, optional): The ROI to apply. Defaults to the center of the detector.
+            vmin (float, optional): The lower colorbar limit. Defaults to None.
+            vmax (float, optional): The higher colorbar limit. Defaults to 4.
+        """
+        run = self.run
+
+        scores = self.getScore(snap_idx)
+        score = scores[0]
+        lit_pixels = scores[1]
+        lit_pixels_module = scores[2]
+
+        title_txt = f'run {run} - shot {snap_idx} - IS {score:.3} - LP {lit_pixels} - LPM {lit_pixels_module}'
+        self.cxi.plot(snap_idx, ADU=False, ROI_value=ROI, vmax=vmax, vmin=vmin)
+        plt.title(title_txt)
 
     def plotHitModule(self,
                       snap_idx=None,
@@ -142,25 +201,44 @@ class hitsAnalyzer():
         self.cxi.plot(snap_idx, ADU=False, ROI_value=ROI, vmax=vmax, vmin=vmin)
         plt.title(title_txt)
 
+    def getScore(self, snap_idx):
+        mask = self.module_masks[str(self.hits_module)]
+        adu_per_photon = self.input['cxi_adu_per_photon']
+        ROI = value2ROI(self.hits_ROI_value)
+        calib_data = self.cxi.getCalibrateModule(snap_idx, self.hits_module)
+        scores = getScore(calib_data, adu_per_photon, mask, ROI)
+        return scores
+
     def plotHits(self,
                  num_max=5,
                  inten_lim=[0, np.inf],
                  lp_lim=[0, np.inf],
+                 lpm_lim=[0, np.inf],
                  vmin=None,
                  vmax=4,
                  order='descending',
                  save=False):
         # The number 1180-1189 is meant to prevent the abnormal data due to detector misbehavior.
-        threshold_idx = np.where((self.intensity_scores > inten_lim[0])
-                                 & (self.lit_pixels > lp_lim[0])
-                                 & (self.intensity_scores < inten_lim[1])
-                                 & (self.lit_pixels < lp_lim[1])
-                                 & ((self.lit_pixels > 1189)
-                                    | (self.lit_pixels < 1180)))[0]
-        max_inten_score = np.max(self.intensity_scores)
-        max_lit_pixel = np.max(self.lit_pixels)
-        frame_scores = self.intensity_scores[threshold_idx] / max_inten_score
-        frame_scores += self.lit_pixels[threshold_idx] / max_lit_pixel
+        # threshold_idx = np.where((self.intensity_scores_ROI > inten_lim[0])
+        #                          & (self.lit_pixels_ROI > lp_lim[0])
+        #                          & (self.intensity_scores_ROI < inten_lim[1])
+        #                          & (self.lit_pixels_ROI < lp_lim[1])
+        #                          & ((self.lit_pixels_ROI > 1189)
+        #                             | (self.lit_pixels_ROI < 1180)))[0]
+        threshold_idx = np.where((self.intensity_scores_ROI > inten_lim[0])
+                                 & (self.lit_pixels_ROI > lp_lim[0])
+                                 & (self.intensity_scores_ROI < inten_lim[1])
+                                 & (self.lit_pixels_ROI < lp_lim[1])
+                                 & (self.lit_pixels_module > lpm_lim[0])
+                                 & (self.lit_pixels_module < lpm_lim[1]))[0]
+        max_inten_score = np.max(self.intensity_scores_ROI)
+        max_lit_pixel = np.max(self.lit_pixels_ROI)
+        # max_lit_pixel_module = np.max(self.lit_pixels_module)
+        frame_scores = self.intensity_scores_ROI[
+            threshold_idx] / max_inten_score
+        frame_scores += self.lit_pixels_ROI[threshold_idx] / max_lit_pixel
+        # frame_scores += self.lit_pixels_module[
+        #     threshold_idx] / max_lit_pixel_module
         if order == 'descending':
             ind = np.argsort(-frame_scores)[:num_max]
         elif order == 'ascending':
@@ -183,6 +261,16 @@ class hitsAnalyzer():
             if (save):
                 plt.savefig(f'r{self.run:04}_{num:04}_append.png', dpi=100)
                 plt.close()
+
+
+def getScore(calib_data, adu_per_photon, mask, ROI, photon_thresh=0.5):
+    nphotons = calib_data / adu_per_photon * mask
+    nphotons[nphotons < photon_thresh] = 0
+    lit_pixels_module = np.count_nonzero(nphotons)
+    nphotons_ROI = nphotons[ROI]
+    intensity_score_ROI = np.log(nphotons_ROI.sum())
+    lit_pixels_ROI = np.count_nonzero(nphotons_ROI)
+    return intensity_score_ROI, lit_pixels_ROI, lit_pixels_module
 
 
 def plotHist(run: int, data, label: str, sort=False):

@@ -7,7 +7,7 @@ import numpy as np
 import h5py
 from pathlib import Path
 from cxiapi import cxiData, calibrateFixedGainModule, value2ROI
-from cxiapi.hitsAnalyzer import plotHist
+from cxiapi.hitsAnalyzer import plotHist, getScore
 import matplotlib.pyplot as plt
 from p_tqdm import p_umap
 from functools import partial
@@ -39,12 +39,10 @@ def getCalibData(snap_idx, module_index):
 
 def check_snapshot(snap_idx, module_index, photon_thresh=0.5):
     calib_data = getCalibData(snap_idx, module_index)
-    nphotons = calib_data / adu_per_photon * mask
-    nphotons[nphotons < photon_thresh] = 0
-    lit_pixels_module = np.count_nonzero(nphotons)
-    nphotons_ROI = nphotons[ROI]
-    intensity_score_ROI = np.log(nphotons_ROI.sum())
-    lit_pixels_ROI = np.count_nonzero(nphotons_ROI)
+    scores = getScore(calib_data, adu_per_photon, mask, ROI)
+    intensity_score_ROI = scores[0]
+    lit_pixels_ROI = scores[1]
+    lit_pixels_module = scores[2]
     return snap_idx, intensity_score_ROI, lit_pixels_ROI, lit_pixels_module
 
 
