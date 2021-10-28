@@ -39,7 +39,7 @@ def getCalibData(snap_idx, module_index):
 
 def check_snapshot(snap_idx, module_index, photon_thresh=0.5):
     calib_data = getCalibData(snap_idx, module_index)
-    scores = getScore(calib_data, adu_per_photon, mask, ROI)
+    scores = getScore(calib_data, adu_per_photon, mask, ROI, photon_thresh)
     intensity_score_ROI = scores[0]
     lit_pixels_ROI = scores[1]
     lit_pixels_module = scores[2]
