@@ -61,9 +61,11 @@ class hitsAnalyzer():
 
     def plotHitModuleLocal(self,
                            snap_idx=None,
-                           ROI='hits_ROI',
+                           ROI_value='hits_ROI',
                            vmin=None,
-                           vmax=4):
+                           vmax=4,
+                           figsize=None,
+                           **kwargs):
         """Plot a hit-finding module with hits information.
 
         Args:
@@ -75,8 +77,8 @@ class hitsAnalyzer():
         """
         run = self.run
 
-        if ROI == 'hits_ROI':
-            ROI = self.hits_ROI_value
+        if ROI_value == 'hits_ROI':
+            ROI_value = self.hits_ROI_value
 
         scores = self.getScore(snap_idx)
         score = scores[0]
@@ -88,16 +90,20 @@ class hitsAnalyzer():
                       self.hits_module,
                       ADU=False,
                       transpose=True,
-                      ROI_value=ROI,
+                      ROI_value=ROI_value,
                       vmax=vmax,
-                      vmin=vmin)
+                      vmin=vmin,
+                      figsize=figsize,
+                      **kwargs)
         plt.title(title_txt)
 
     def plotHitAppendLocal(self,
                            snap_idx=None,
-                           ROI=((500, 800), (430, 700)),
+                           ROI_value=((500, 800), (430, 700)),
                            vmin=None,
-                           vmax=4):
+                           vmax=4,
+                           figsize=None,
+                           **kwargs):
         """Plot a hit-finding append image with hits information.
 
         Args:
@@ -114,15 +120,22 @@ class hitsAnalyzer():
         lit_pixels_module = scores[2]
 
         title_txt = f'run {run} - shot {snap_idx} - IS {score:.3} - LP {lit_pixels} - LPM {lit_pixels_module}'
-        self.cxi.plot(snap_idx, ADU=False, ROI_value=ROI, vmax=vmax, vmin=vmin)
+        self.cxi.plot(snap_idx,
+                      ADU=False,
+                      ROI_value=ROI_value,
+                      vmax=vmax,
+                      vmin=vmin,
+                      figsize=figsize,
+                      **kwargs)
         plt.title(title_txt)
 
     def plotHitModule(self,
                       snap_idx=None,
                       frame_idx=None,
-                      ROI='hits_ROI',
+                      ROI_value='hits_ROI',
                       vmin=None,
-                      vmax=4):
+                      vmax=4,
+                      **kwargs):
         """Plot a hit-finding module with hits information.
 
         Args:
@@ -148,8 +161,8 @@ class hitsAnalyzer():
                 "One and only one of 'snap_idx' and 'frame_idx' should be set."
             )
 
-        if ROI == 'hits_ROI':
-            ROI = self.hits_ROI_value
+        if ROI_value == 'hits_ROI':
+            ROI_value = self.hits_ROI_value
 
         score = self.intensity_scores_ROI[frame_idx]
         lit_pixels = self.lit_pixels_ROI[frame_idx]
@@ -160,17 +173,19 @@ class hitsAnalyzer():
                       self.hits_module,
                       ADU=False,
                       transpose=True,
-                      ROI_value=ROI,
+                      ROI_value=ROI_value,
                       vmax=vmax,
-                      vmin=vmin)
+                      vmin=vmin,
+                      **kwargs)
         plt.title(title_txt)
 
     def plotHitAppend(self,
                       snap_idx=None,
                       frame_idx=None,
-                      ROI=((500, 800), (430, 700)),
+                      ROI_value=((500, 800), (430, 700)),
                       vmin=None,
-                      vmax=4):
+                      vmax=4,
+                      **kwargs):
         """Plot a hit-finding append image with hits information.
 
         Args:
@@ -199,7 +214,12 @@ class hitsAnalyzer():
         lit_pixels = self.lit_pixels_ROI[frame_idx]
         lit_pixels_module = self.lit_pixels_module[frame_idx]
         title_txt = f'run {run} - shot {snap_idx} - IS {score:.3} - LP {lit_pixels} - LPM {lit_pixels_module}'
-        self.cxi.plot(snap_idx, ADU=False, ROI_value=ROI, vmax=vmax, vmin=vmin)
+        self.cxi.plot(snap_idx,
+                      ADU=False,
+                      ROI_value=ROI_value,
+                      vmax=vmax,
+                      vmin=vmin,
+                      **kwargs)
         plt.title(title_txt)
 
     def getScore(self, snap_idx):
@@ -218,7 +238,8 @@ class hitsAnalyzer():
                  vmin=None,
                  vmax=4,
                  order='descending',
-                 save_folder=None):
+                 save_folder=None,
+                 **kwargs):
         # The number 1180-1189 is meant to prevent the abnormal data due to detector misbehavior.
         # threshold_idx = np.where((self.intensity_scores_ROI > inten_lim[0])
         #                          & (self.lit_pixels_ROI > lp_lim[0])
@@ -258,12 +279,18 @@ class hitsAnalyzer():
             elif num == 10:
                 print('...')
             frame_idx = threshold_idx[i]
-            self.plotHitModule(frame_idx=frame_idx, vmin=vmin, vmax=vmax)
+            self.plotHitModule(frame_idx=frame_idx,
+                               vmin=vmin,
+                               vmax=vmax,
+                               **kwargs)
             if (save_folder):
                 save_path = save_root / f'r{self.run:04}_{num:04}_module.png'
                 plt.savefig(str(save_path), dpi=100)
                 plt.close()
-            self.plotHitAppend(frame_idx=frame_idx, vmin=vmin, vmax=vmax)
+            self.plotHitAppend(frame_idx=frame_idx,
+                               vmin=vmin,
+                               vmax=vmax,
+                               **kwargs)
             if (save_folder):
                 save_path = save_root / f'r{self.run:04}_{num:04}_append.png'
                 plt.savefig(str(save_path), dpi=100)

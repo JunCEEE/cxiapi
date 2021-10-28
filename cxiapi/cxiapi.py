@@ -291,6 +291,7 @@ class cxiData():
              module_mask: ndarray = None,
              ADU: bool = True,
              transpose: bool = False,
+             figsize=None,
              **kwargs):
         if ROI_value is None:
             ROI_value = self.ROI_value
@@ -300,29 +301,29 @@ class cxiData():
                                                        module_mask, ADU)
             # if not ADU:
             #     kwargs['vmax'] = kwargs.pop('vmax', 2)
+            if figsize is None:
+                figsize = (8, 8)
             plotDetector(self.assembleDetector(calib_detector), ROI, transpose,
-                         **kwargs)
+                         figsize, **kwargs)
         else:
             calib_data = self.getPostProcessedData(snap_idx, module_idx,
                                                    module_mask, ADU)
             # if not ADU:
             #     kwargs['vmax'] = kwargs.pop('vmax', 2)
-            plotModule(calib_data, ROI, transpose, **kwargs)
+            plotModule(calib_data, ROI, transpose, figsize, **kwargs)
 
 
 def plotDetector(assemble_detector: ndarray,
                  ROI: list = None,
                  transpose=False,
+                 figsize=(8, 8),
                  **kwargs):
     data_indices = np.indices(assemble_detector.shape)
-    row_max = np.max(data_indices[0][ROI])
-    row_min = np.min(data_indices[0][ROI])
-    col_max = np.max(data_indices[1][ROI])
-    col_min = np.min(data_indices[1][ROI])
+    row_max, row_min, col_max, col_min = __getROIrange(data_indices, ROI)
 
     kwargs['origin'] = kwargs.pop('origin', 'lower')
 
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=figsize)
     if transpose:
         plt.imshow(assemble_detector.transpose(), **kwargs)
         plt.ylim(col_max, col_min)
@@ -337,12 +338,10 @@ def plotDetector(assemble_detector: ndarray,
 def plotModule(calib_data: ndarray,
                ROI: list = None,
                transpose: bool = False,
+               figsize=None,
                **kwargs):
     data_indices = np.indices(calib_data.shape)
-    row_max = np.max(data_indices[0][ROI])
-    row_min = np.min(data_indices[0][ROI])
-    col_max = np.max(data_indices[1][ROI])
-    col_min = np.min(data_indices[1][ROI])
+    row_max, row_min, col_max, col_min = __getROIrange(data_indices, ROI)
     extent = [col_min, col_max, row_min, row_max]
     roi_data = calib_data[ROI]
 
@@ -352,7 +351,7 @@ def plotModule(calib_data: ndarray,
 
     kwargs['origin'] = kwargs.pop('origin', 'lower')
     kwargs['extent'] = kwargs.pop('extent', extent)
-    plt.figure()
+    plt.figure(figsize)
     plt.imshow(roi_data, **kwargs)
     plt.colorbar()
 
@@ -453,3 +452,22 @@ def value2ROI(ROI_value: list):
     ROI = (slice(ROI_value[0][0],
                  ROI_value[0][1]), slice(ROI_value[1][0], ROI_value[1][1]))
     return ROI
+
+
+def __getROIrange(data_indices, ROI):
+    try:
+        row_max = np.max(data_indices[0][ROI])
+        row_min = np.min(data_indices[0][ROI])
+        col_max = np.max(data_indices[1][ROI])
+        col_min = np.min(data_indices[1][ROI])
+    except ValueError as e:
+        if 'zero-size array to reduction operation maximum which has no identity' in str(
+                e):
+            row_limit = [data_indices[0].min(), data_indices[0].max()]
+            col_limit = [data_indices[1].min(), data_indices[1].max()]
+            raise ValueError(
+                f"Lower ROI limit is too high. Valid range = [{row_limit}, {col_limit}]"
+            ) from None
+        else:
+            raise ValueError(str(e)) from None
+    return row_max, row_min, col_max, col_min
