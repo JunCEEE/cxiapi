@@ -24,8 +24,14 @@ class cxiData():
         self.verbose = verbose
         self.checkVDS()
         dset_shape = self.data.shape
-        self.module_eg = np.empty(
-            (dset_shape[1], dset_shape[3], dset_shape[4]))
+        if len(dset_shape) > 4:
+            self.module_eg = np.empty(
+                (dset_shape[1], dset_shape[3], dset_shape[4]))
+            self.__is_corrected = False
+        else:
+            self.module_eg = np.empty(
+                (dset_shape[1], dset_shape[2], dset_shape[3]))
+            self.__is_corrected = True
         self.debug = debug
 
         self.cleanROI()
@@ -257,7 +263,10 @@ class cxiData():
 
         if module_idx is None:
             # Return the whole detector
-            calib_detector = self.getCalibrateDetector(snap_idx)
+            if self.__is_corrected is not True:
+                calib_detector = self.getCalibrateDetector(snap_idx)
+            else:
+                calib_detector = self.data[snap_idx]
             if not ADU:
                 calib_detector /= self.adu_per_photon
                 calib_detector[calib_detector < 0.5] = 0
@@ -266,7 +275,10 @@ class cxiData():
             return calib_detector
         else:
             # Return one module
-            calib_data = self.getCalibrateModule(snap_idx, module_idx)
+            if self.__is_corrected is not True:
+                calib_data = self.getCalibrateModule(snap_idx, module_idx)
+            else:
+                calib_detector = self.data[snap_idx, module_idx]
             if not ADU:
                 calib_data /= self.adu_per_photon
                 calib_data[calib_data < 0.5] = 0
